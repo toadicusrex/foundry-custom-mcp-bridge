@@ -1,0 +1,24 @@
+{
+  "id": "foundry-custom-mcp-bridge",
+  "title": "Foundry Custom MCP Bridge",
+  "description": "Connects a Foundry world to a local custom MCP server for document CRUD.",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13.351"
+  },
+  "authors": [
+    {
+      "name": "Todd Bennion"
+    }
+  ],
+  "url": "https://github.com/toadicusrex/foundry-custom-mcp-bridge",
+  "esmodules": [
+    "scripts/bridge.js"
+  ],
+  "relationships": {
+    "systems": []
+  },
+  "manifest": "https://raw.githubusercontent.com/toadicusrex/foundry-custom-mcp-bridge/main/module.json",
+  "download": "https://github.com/toadicusrex/foundry-custom-mcp-bridge/archive/refs/heads/main.zip"
+}
