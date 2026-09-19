@@ -36,6 +36,9 @@ const SUPPORTED_EMBEDDED = {
 
 let socket = null;
 let reconnectTimer = null;
+let connectionStatus = "Disconnected";
+let connectionDetail = "The bridge has not connected yet.";
+let connectedAt = null;
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "serverUrl", {
@@ -44,7 +47,8 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: String,
-    default: DEFAULT_SERVER_URL
+    default: DEFAULT_SERVER_URL,
+    onChange: () => scheduleReconnect(0)
   });
 
   game.settings.register(MODULE_ID, "authToken", {
@@ -53,7 +57,8 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: String,
-    default: ""
+    default: "",
+    onChange: () => scheduleReconnect(0)
   });
 
   game.settings.register(MODULE_ID, "writeMode", {
@@ -78,31 +83,65 @@ Hooks.once("init", () => {
     type: String,
     default: ""
   });
+
+  game.settings.registerMenu(MODULE_ID, "connectionTest", {
+    name: "Bridge connection",
+    hint: "View the live connection state and test the bridge without changing Foundry data.",
+    label: "Test connection",
+    icon: "fas fa-plug",
+    scope: "world",
+    config: true,
+    restricted: true,
+    type: BridgeConnectionTestApplication
+  });
 });
 
-Hooks.once("ready", async () => {
+Hooks.once("ready", () => {
   if (!game.user?.isGM) return;
-  await connectBridge();
+  connectBridge();
 });
 
-async function connectBridge() {
+function scheduleReconnect(delayMs = 3000) {
   clearTimeout(reconnectTimer);
+  reconnectTimer = window.setTimeout(() => connectBridge(), delayMs);
+}
 
-  const baseUrl = game.settings.get(MODULE_ID, "serverUrl");
-  const authToken = game.settings.get(MODULE_ID, "authToken");
-  const url = new URL(baseUrl);
+function connectBridge({ onOpen, onFailure } = {}) {
+  clearTimeout(reconnectTimer);
+  if (!game.user?.isGM) return;
 
-  if (authToken) {
-    url.searchParams.set("token", authToken);
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.close(1000, "Refreshing bridge connection");
   }
 
-  socket = new WebSocket(url.toString());
+  let url;
+  try {
+    const baseUrl = game.settings.get(MODULE_ID, "serverUrl");
+    const authToken = game.settings.get(MODULE_ID, "authToken");
+    url = new URL(baseUrl);
 
-  socket.addEventListener("open", () => {
+    if (authToken) {
+      url.searchParams.set("token", authToken);
+    }
+  } catch (error) {
+    setConnectionStatus("Error", `Invalid server URL: ${error instanceof Error ? error.message : String(error)}`);
+    onFailure?.();
+    return;
+  }
+
+  setConnectionStatus("Connecting", `Opening bridge connection to ${url.origin}${url.pathname}.`);
+  const activeSocket = new WebSocket(url.toString());
+  socket = activeSocket;
+  let hasOpened = false;
+
+  activeSocket.addEventListener("open", () => {
+    hasOpened = true;
     console.log(`${MODULE_ID} connected`, url.toString());
+    setConnectionStatus("Connected", "WebSocket handshake completed; Foundry is ready to receive bridge requests.");
+    onOpen?.();
   });
 
-  socket.addEventListener("message", async (event) => {
+  activeSocket.addEventListener("message", async (event) => {
     try {
       const message = JSON.parse(event.data);
       if (message?.type !== "mcp-query" || !message?.id) return;
@@ -135,15 +174,62 @@ async function connectBridge() {
     }
   });
 
-  socket.addEventListener("close", () => {
-    reconnectTimer = window.setTimeout(() => {
-      connectBridge().catch((error) => console.error(`${MODULE_ID} reconnect failed`, error));
-    }, 3000);
+  activeSocket.addEventListener("close", () => {
+    if (socket !== activeSocket) return;
+    setConnectionStatus("Disconnected", "Bridge connection closed; retrying automatically in three seconds.");
+    if (!hasOpened) onFailure?.();
+    scheduleReconnect();
   });
 
-  socket.addEventListener("error", (error) => {
+  activeSocket.addEventListener("error", (error) => {
     console.error(`${MODULE_ID} socket error`, error);
+    setConnectionStatus("Error", "The bridge WebSocket could not connect. Check the server URL, tunnel, and shared token.");
+    if (!hasOpened) onFailure?.();
   });
+}
+
+function setConnectionStatus(status, detail) {
+  connectionStatus = status;
+  connectionDetail = detail;
+  if (status === "Connected") connectedAt = new Date().toLocaleString();
+}
+
+class BridgeConnectionTestApplication extends FormApplication {
+  static get defaultOptions() {
+    return foundry.utils.mergeObject(super.defaultOptions, {
+      id: `${MODULE_ID}-connection-test`,
+      title: "Foundry Custom MCP Bridge connection",
+      template: `modules/${MODULE_ID}/templates/connection-test.html`,
+      width: 500,
+      height: "auto",
+      closeOnSubmit: false
+    });
+  }
+
+  getData() {
+    return { connectionStatus, connectionDetail, connectedAt };
+  }
+
+  activateListeners(html) {
+    super.activateListeners(html);
+    html.find("[data-action='test-connection']").on("click", (event) => {
+      event.preventDefault();
+      setConnectionStatus("Connecting", "Testing bridge connection.");
+      connectBridge({
+        onOpen: () => {
+          ui.notifications.info("Foundry Custom MCP Bridge is connected.");
+          this.render(false);
+        },
+        onFailure: () => {
+          ui.notifications.error("Foundry Custom MCP Bridge could not connect. See the status panel for details.");
+          this.render(false);
+        }
+      });
+      this.render(false);
+    });
+  }
+
+  async _updateObject() {}
 }
 
 function safeParseRequestId(raw) {
@@ -510,26 +596,34 @@ function listCompendiumPacks({ documentName } = {}) {
     }));
 }
 
-async function searchCompendium({ packId, query = "", type, limit = 50 } = {}) {
+async function searchCompendium({ packId, query = "", type, limit = 50, offset = 0 } = {}) {
   const pack = game.packs.get(packId);
   if (!pack) {
     throw new Error(`Compendium pack not found: ${packId}`);
   }
   const index = await pack.getIndex();
   const lowered = String(query).trim().toLowerCase();
-  return index.contents
+  const matches = index.contents
     .filter((entry) => {
       if (type && entry.type !== type) return false;
       if (!lowered) return true;
       return String(entry.name ?? "").toLowerCase().includes(lowered);
-    })
-    .slice(0, limit)
+    });
+  const pageOffset = Math.max(0, Number.parseInt(offset, 10) || 0);
+  const pageSize = Math.min(200, Math.max(1, Number.parseInt(limit, 10) || 50));
+  return {
+    total: matches.length,
+    offset: pageOffset,
+    limit: pageSize,
+    entries: matches
+    .slice(pageOffset, pageOffset + pageSize)
     .map((entry) => ({
       id: entry._id,
       name: entry.name,
       type: entry.type ?? null,
       img: entry.img ?? null
-    }));
+    }))
+  };
 }
 
 async function getCompendiumEntry(packId, entryId) {

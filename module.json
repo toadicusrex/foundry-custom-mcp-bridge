@@ -2,10 +2,10 @@
   "id": "foundry-custom-mcp-bridge",
   "title": "Foundry Custom MCP Bridge",
   "description": "Connects a Foundry world to a local custom MCP server for document CRUD.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compatibility": {
     "minimum": "13",
-    "verified": "13.351"
+    "verified": "14.365"
   },
   "authors": [
     {
