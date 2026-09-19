@@ -1,0 +1,8 @@
+<form class="foundry-custom-mcp-connection-test">
+  <p><strong>Status:</strong> {{connectionStatus}}</p>
+  <p>{{connectionDetail}}</p>
+  {{#if connectedAt}}<p><strong>Last connected:</strong> {{connectedAt}}</p>{{/if}}
+  <footer class="sheet-footer flexrow">
+    <button type="button" data-action="test-connection"><i class="fas fa-plug"></i> Test connection</button>
+  </footer>
+</form>
