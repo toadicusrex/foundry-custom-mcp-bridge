@@ -1,0 +1,20 @@
+{
+  "name": "foundry-mcp-connector",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Docker-hosted local connector between a Foundry browser module, Codex, and CharacterStudio.",
+  "scripts": {
+    "start": "node src/mcp-client.js",
+    "start:connector": "node src/connector-daemon.js",
+    "check": "node --check src/connector-daemon.js && node --check src/mcp-client.js && node --check src/remote-connector.js && node --check src/foundry-connector.js && node --check scripts/bridge.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

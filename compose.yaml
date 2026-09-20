@@ -1,0 +1,16 @@
+name: foundry-mcp-connector
+
+services:
+  connector:
+    build: .
+    image: foundry-mcp-connector:local
+    container_name: foundry-mcp-connector
+    env_file: .env
+    environment:
+      FOUNDRY_MCP_HOST: 0.0.0.0
+      FOUNDRY_MCP_PORT: "47811"
+    ports:
+      - "127.0.0.1:47811:47811"
+    volumes:
+      - ./runtime:/app/runtime
+    restart: unless-stopped

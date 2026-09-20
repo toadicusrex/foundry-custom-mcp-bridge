@@ -1,0 +1,6 @@
+.git
+node_modules
+runtime
+.env
+README.md
+SETUP-ON-OTHER-MACHINE.md

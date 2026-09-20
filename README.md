@@ -1,30 +1,52 @@
-# Foundry Custom MCP Bridge
+# Foundry MCP Connector
 
-This repository contains the Foundry VTT module portion of the custom MCP bridge.
+**Foundry MCP Connector** is the local Docker service that connects the installed **Foundry Custom MCP Bridge** module to Codex and CharacterStudio.
 
-The module is intended to run in a Foundry world and connect back to a separately hosted MCP server over WebSocket or secure WebSocket.
+It is not a second Foundry module. The module remains installed in the Forge world; this container runs locally on the computer currently in use.
 
-## What this module does
+```text
+Foundry browser module ── ws://127.0.0.1:47811 ──> Docker connector
+Codex MCP client ── http://127.0.0.1:47811 ─────> Docker connector
+CharacterStudio ── Docker host address ─────────> Docker connector
+```
 
-- connects a Foundry world to a local or tunneled MCP bridge
-- exposes guarded document operations through a narrow message contract
-- supports read-only, actor-write-only, and full-write modes
-- includes preflight validation for risky operations such as token placement and folder moves
+The container publishes only `127.0.0.1:47811`, not the LAN or internet. The Foundry module can keep its existing Server URL:
 
-## Forge note
+```text
+ws://127.0.0.1:47811/foundry-custom-mcp
+```
 
-If you run your world on The Forge, this module still runs in your browser. The bridge server remains separate and can run on your machine.
+Because the module runs in the active browser, `127.0.0.1` refers to whichever computer is currently running the container.
 
-## Included files
+## Run locally
 
-- `module.json`
-- `scripts/bridge.js`
+```powershell
+Copy-Item .env.example .env
+# Set the one shared FOUNDRY_MCP_TOKEN in .env.
+docker compose up -d --build
+```
 
-## Repository URLs
+The same token must be entered in **Game Settings → Foundry Custom MCP Bridge → Auth Token**.
 
-- Repository: `https://github.com/toadicusrex/foundry-custom-mcp-bridge`
-- Manifest: `https://raw.githubusercontent.com/toadicusrex/foundry-custom-mcp-bridge/main/module.json`
+Check the service:
 
-## Release shape
+```powershell
+docker compose ps
+docker compose logs connector
+```
 
-This repository is intentionally module-only so the manifest and installable package can be hosted independently from the broader local MCP server project.
+## Repository layout
+
+- `src/connector-daemon.js` — Docker process that owns the Foundry WebSocket connection.
+- `src/mcp-client.js` — lightweight stdio MCP client launched by Codex.
+- `src/foundry-connector.js` — WebSocket connection and authenticated local APIs.
+- `src/tools.js` — validated Codex tool definitions.
+- `module.json`, `scripts/`, `templates/` — installed Foundry Custom MCP Bridge module. They remain at the repository root so the published Forge manifest URL remains valid.
+
+## Other machine
+
+See [SETUP-ON-OTHER-MACHINE.md](SETUP-ON-OTHER-MACHINE.md). Clone this repository, create the untracked `.env` with the same token, start Compose, then use the Foundry module’s **Test connection** button.
+
+## Safety
+
+Codex forwarding is authenticated and loopback-only. Foundry's configured write mode and collection allowlist remain the authority for document writes. Keep the module in `read-only` or `actor-write-only` unless broader writes are actually required.
